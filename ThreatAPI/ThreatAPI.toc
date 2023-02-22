@@ -1,0 +1,7 @@
+## Interface: 20400
+## Title: Threat API Classic
+## Notes: Re-Implements the WotLK Threat API in old clients
+## Author: insuna
+## Version: 0.0.1
+
+ThreatApi.lua
