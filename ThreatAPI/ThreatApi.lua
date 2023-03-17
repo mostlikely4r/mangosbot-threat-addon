@@ -7,66 +7,72 @@ local messageBuffer = {}
 local creatureBuffer = {}
 local tankingBuffer = {}
 
+function f.strsplit(delimiter, subject)
+  local delimiter, fields = delimiter or ":", {}
+  local pattern = string.format("([^%s]+)", delimiter)
+  string.gsub(subject, pattern, function(c) fields[table.getn(fields)+1] = c end)
+  return unpack(fields)
+end
+
+function f.strtrim(s)
+	return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
+end
+
 local getNormalizedGUID = function(unit)
     if unit == nil then
         return nil
     end
-    local guid = UnitGUID(unit)
-    if guid == nil then
-        return nil
-    end
-    if (GetClassicExpansionLevel ~= nil) then
-		local unit_type = strsplit("-", guid)
-		if unit_type == "Creature" or unit_type == "Vehicle" then
-			local _, _, _, _, _, _, spawn_uid = strsplit("-", guid)
-            guid = spawn_uid
-		elseif unit_type == "Player" then
-			local _, _, player_id = strsplit("-", guid)
-            guid = player_id
-		end
-    end
-    guid = strsub(guid, -6)
-    return guid
+    if (UnitExists(unit)) then
+		return UnitName(unit)..UnitLevel(unit)
+	end
+	return nill
 end
 
 local handleThreatUpdate = function(message)
-    local creatureguid = strsub(message[2], -6)
-    local count = message[3]
+    local creatureguid = message[3]
+    local count = message[4]
     if (creatureBuffer[creatureguid] == nil) then
         creatureBuffer[creatureguid] = {}
     end
-    for i=0,(count * 2)-2,2 do
-        local targetguid = strsub(message[4+i], -6)
-        local targetvalue = message[4+i+1]
+    for i=0,(count * 3)-2,2 do
+        local targetguid = message[6+i]
+        local targetvalue = message[6+i+1]
         creatureBuffer[creatureguid][targetguid] = targetvalue;
     end
+	KLHTM_RequestRedraw("raid");
 end
 
+
 local handleHighestThreatUpdate = function(message)
-    local creatureguid = strsub(message[2], -6)
-    local highestguid = strsub(message[3], -6)
-    local count = message[4]
+    local creatureguid = message[3]
+    local highestguid = message[5]
+    local count = message[6]
     tankingBuffer[creatureguid] = highestguid;
     --DevTools_Dump(tankingBuffer)
     if (creatureBuffer[creatureguid] == nil) then
         creatureBuffer[creatureguid] = {}
     end
-    for i=0,(count * 2)-2,2 do
-        local targetguid = strsub(message[5 + i], -6)
-        local targetvalue = strsub(message[5 + i + 1], -6)
+    for i=0,(count * 3)-2,2 do
+        local targetguid = message[7 + i]
+        local targetvalue = message[7 + i + 1]
         creatureBuffer[creatureguid][targetguid] = targetvalue;
     end
 end
 
 local handleThreatClear = function(message)
-    local creatureguid = strsub(message[2], -6)
+    local itr = 3
+    local creatureguid = message[itr]
+	
     creatureBuffer[creatureguid] = nil
     tankingBuffer[creatureguid] = nil
 end
 
 local handleThreatRemove = function(message)
-    local creatureguid = strsub(message[2], -6)
-    local removedguid = strsub(message[3], -6)
+    local itr = 3
+    local creatureguid = message[itr]
+    itr = itr + 2
+    local removedguid = message[itr]
+	
     if (creatureBuffer[creatureguid] == nil) then
         return;
     end
@@ -75,23 +81,27 @@ end
 
 local handleOpcode = function(message)
     if (message[1] == "SMSG_THREAT_UPDATE") then
+	--print("SMSG_THREAT_UPDATE")
         handleThreatUpdate(message)
     elseif (message[1] == "SMSG_HIGHEST_THREAT_UPDATE") then
+	--print("SMSG_HIGHEST_THREAT_UPDATE")
         handleHighestThreatUpdate(message)
     elseif (message[1] == "SMSG_THREAT_CLEAR") then
+	--print("SMSG_THREAT_CLEAR")
         handleThreatClear(message)
     elseif (message[1] == "SMSG_THREAT_REMOVE") then
+	--print("SMSG_THREAT_REMOVE")
         handleThreatRemove(message)
     end
 end
 
-f:SetScript("OnEvent", function(self, event, ...)    	
-    local msg = ...;
-    local id, content = strsplit(":", msg);
-    if ((id == nil) or (not type(id) == "number")) then
+f:SetScript("OnEvent", function(self)    	
+	local msg = arg1
+    local id, content = f.strsplit(":", msg);
+	    if ((id == nil) or (not type(id) == "number")) then
         return;
     end
-    _, content = strsplit(" ", content)
+    content = f.strtrim(content)
     if (content ~= "END") then
         if (messageBuffer[id] == nil) then
             messageBuffer[id] = {}
@@ -150,6 +160,33 @@ end
 ThreatUnitDetailedThreatSituation = function (unit, mobUnit)
     local _unitGuid = getNormalizedGUID(unit)
     local _mobUnitGuid = getNormalizedGUID(mobUnit)
+
+    local _tankingUnit = tankingBuffer[_mobUnitGuid]
+    local _threatVal = nil
+    if (creatureBuffer[_mobUnitGuid] ~= nil) then
+        _threatVal = creatureBuffer[_mobUnitGuid][_unitGuid]
+    end
+    if _threatVal ~= nil then
+        _threatVal = tonumber(_threatVal)
+    end
+    local _threatStatus = getThreatStatus(_unitGuid, _mobUnitGuid)
+    if _threatStatus ~= nil then
+        _threatStatus = tonumber(_threatStatus)
+    end
+    local _threatPct1 = UnitThreatPercentageOfLead(_unitGuid, _mobUnitGuid, true)
+    if _threatPct1 ~= nil then
+        _threatPct1 = tonumber(_threatPct1)
+    end
+    local _threatPct2 = UnitThreatPercentageOfLead(_unitGuid, _mobUnitGuid, false)
+    if _threatPct2 ~= nil then
+        _threatPct2 = tonumber(_threatPct2)
+    end
+    return _tankingUnit == _unitGuid, _threatStatus, _threatPct1, _threatPct2, _threatVal
+end
+
+ThreatUnitDetailedNameThreatSituation = function (unit, mobUnitname)
+    local _unitGuid = getNormalizedGUID(unit)
+    local _mobUnitGuid = mobUnitname
 
     local _tankingUnit = tankingBuffer[_mobUnitGuid]
     local _threatVal = nil

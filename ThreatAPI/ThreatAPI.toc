@@ -1,4 +1,4 @@
-## Interface: 20400
+## Interface: 11200
 ## Title: Threat API Classic
 ## Notes: Re-Implements the WotLK Threat API in old clients
 ## Author: insuna
