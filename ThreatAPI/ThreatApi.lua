@@ -15,6 +15,7 @@ function f.strsplit(delimiter, subject)
 end
 
 function f.strtrim(s)
+	if s == nill then return nill end
 	return (string.gsub(s, "^%s*(.-)%s*$", "%1"))
 end
 
@@ -185,6 +186,7 @@ ThreatUnitDetailedThreatSituation = function (unit, mobUnit)
 end
 
 ThreatUnitDetailedNameThreatSituation = function (unit, mobUnitname)
+	mobUnitname = string.gsub(mobUnitname, "-1", "63")
     local _unitGuid = getNormalizedGUID(unit)
     local _mobUnitGuid = mobUnitname
 
